@@ -3,48 +3,14 @@
 #include <string.h>
 #include <stdbool.h>
 #include <iostream>
+#include "serviceInfo.h"
+#include "localTypes.h"
+#include "watchDog.h"
+
 
 // below line is required as the mpegts stuff is unstable
 #define GST_USE_UNSTABLE_API
 #include <gst/mpegts/mpegts.h>
-
-
-
-// defiitions and enums that describe teh services
-typedef enum{
-        MPEG2 = 0,
-        H264 = 1
-}eVideoCodec;
-
-typedef enum{
-      yuv420p = 0,
-      yuv422p,
-      yuv420p10,
-      yuv422p10
-}eChromaFormat;
-
-
-typedef struct{
-  guint16       programNumber;
-  guint16       VideoPID;
-  guint16       AudioPID;
-  guint16       PCR_RID;
-  eVideoCodec   VideoCodec;
-  char*         ServiceProvider;
-  char*         ServiceName;
-  guint16       VideoWidth;
-  guint16       VideoHeight;
-  eChromaFormat ChromaFormat;
-}PerServiceMetaData;
-
-typedef struct{
-    bool  haveSeenPAT;
-    bool  haveSeenPMT;
-    bool  haveSeenSDT;
-    guint16 numberServicesInfoStoredFor;
-    guint16 MAX_numberServicesInfoStoredFor;
-    PerServiceMetaData  **ServiceComponents;
-}ServiceMetaData;
 
 
 typedef struct{
@@ -53,17 +19,6 @@ typedef struct{
 }mainAppMetaData;
 
 
-// below is used in the periodic timer based "Janitor function"
-typedef struct
-{
-  int timerCallsSoFar;
-  GstElement *pipelineToControl;
-  GMainLoop  *ApplicationMainloop;
-  GstElement *parserInLine;
-  GstElement *videoDecoder;
-  GstElement *theVideoAdapter;
-  GstElement *theVideoFakeSink;
-}infoAboutMe;
 
 // useful URLS
 // https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
@@ -73,29 +28,12 @@ typedef struct
 //https://gstreamer.freedesktop.org/data/doc/gstreamer/head/gst-plugins-bad-libs/html/gst-plugins-bad-libs-Base-MPEG-TS-sections.html#GstMpegtsSection-struct
 
 
-//how to use GstCaps *gst_pad_get_caps (GstPad *pad);
-//GstCaps *gst_pad_get_caps
-
-// stuff to read capabilties to see what is flowingthrough the system
-void read_video_props (GstCaps *caps)
+static gboolean timedCall2 (gpointer data)
 {
-  gint width, height;
-  const GstStructure *str;
-
-  g_return_if_fail (gst_caps_is_fixed (caps));
-
-  str = gst_caps_get_structure (caps, 0);
-  if (!gst_structure_get_int (str, "width", &width) ||
-      !gst_structure_get_int (str, "height", &height)) {
-    g_print ("No width/height available\n");
-    return;
-  }
-
-  g_print ("The video size of this set of capabilities is %dx%d\n",
-       width, height);
+  WatchDog *theWatchDog = (WatchDog*)data;
+  theWatchDog->wd_JanitorCall();
+  return(1);
 }
-
-
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // This program is aimed at testing that the below CLI
@@ -105,70 +43,6 @@ void read_video_props (GstCaps *caps)
 //                    autovideosink
 // can be made into a C program and still work
 
-
-static gboolean timedCall (gpointer data)
-{
-  infoAboutMe* psystemMetaInfo = (infoAboutMe*)data;
-  g_print("Timed  %d\n", psystemMetaInfo->timerCallsSoFar);
-  psystemMetaInfo->timerCallsSoFar++;
-
-  // really brittle!
-  if(1)
-  {
-    if(psystemMetaInfo->timerCallsSoFar == 3)
-    {
-        GstPad* VideoAdapterOutputPin;
-        GstCaps* capsOfVideoOutputPin;
-        g_print(" Checking pin caps  \n");
-        VideoAdapterOutputPin = gst_element_get_static_pad (psystemMetaInfo->theVideoAdapter, "sink");
-        if (VideoAdapterOutputPin == NULL)
-        {
-          g_print(" PIN IS NULL  \n");
-        }
-        else
-        {
-          gboolean isActive = gst_pad_is_active (VideoAdapterOutputPin);
-          (isActive == TRUE) ? g_print(" PIN IS ACTIVE  \n"): g_print(" PIN IS ASLEEP  \n");
-        }
-        capsOfVideoOutputPin = gst_pad_get_current_caps(VideoAdapterOutputPin);
-        if (capsOfVideoOutputPin == NULL)
-        {
-          g_print(" CAPS IS NULL  \n");
-        }
-        else
-        {
-            gint width, height;
-            const GstStructure *str;
-
-            //g_return_if_fail (gst_caps_is_fixed (capsOfVideoOutputPin));
-
-            str = gst_caps_get_structure (capsOfVideoOutputPin, 0);
-            if (!gst_structure_get_int (str, "width", &width) ||
-                !gst_structure_get_int (str, "height", &height))
-            {
-              g_print ("No width/height available\n");
-            }
-            else
-            {
-              g_print (" video is %dx%d\n", width, height);
-            }
-        }
-        //read_video_props(capsOfVideoOutputPin);
-        //gst_pad_get_caps();
-    }
-  }
-  if(psystemMetaInfo->timerCallsSoFar == 5)
-  {
-      g_print(" Setting pipeline state to NULL \n");
-      gst_element_set_state (psystemMetaInfo->pipelineToControl, GST_STATE_NULL);
-  }
-  if(psystemMetaInfo->timerCallsSoFar == 8)
-  {
-      g_print(" quitting the main loop \n");
-      g_main_loop_quit(psystemMetaInfo->ApplicationMainloop);
-  }
-  return(1);
-}
 
 
 static void ParseInfoFromTSFrontEnds( GstMessage *msg,
@@ -288,8 +162,6 @@ static void ParseInfoFromTSFrontEnds( GstMessage *msg,
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->PCR_RID = pPMT_Section->pcr_pid;
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->VideoPID = videoPID;
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->AudioPID = audioPID;
-
-
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->programNumber = pPMT_Section->program_number;
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->ServiceName = NULL;     // set these two ponters SAFE
                     pServiceMeta->ServiceComponents[nextSIStoreSlot]->ServiceProvider = NULL;
@@ -433,6 +305,8 @@ int main(int argc, char *argv[])
   mainAppMetaData MainAppMeta;
   std::string inputTSFile("NULL");
 
+  WatchDog *theWatchDog = new WatchDog(1000, &systemMetaInfo);
+  g_print ("Just below the watchdog \n");
 
  if (argc == 2)
   {
@@ -440,7 +314,8 @@ int main(int argc, char *argv[])
   }
   else
   {
-    std::cout<< "Requires a source TS file to work on"<<std::endl;
+    std::cout<< "Requires a source TS file to work on"<<std::flush;
+
     exit(0);
   }
 
@@ -541,7 +416,9 @@ int main(int argc, char *argv[])
 
   // create a periodic timer based function that is called to do the housework
   // and any required maintenance tasksm scheduing etc
-  g_timeout_add (timedFuncInterval, timedCall , &systemMetaInfo);
+  //guint idOfTimer1 = g_timeout_add (timedFuncInterval, timedCall , &systemMetaInfo);
+
+  guint idOfTimer2 = g_timeout_add(1000, timedCall2, theWatchDog);
 
   // Set the pipeline to the "playing" state
   g_print ("Now starting the pipeline :\n");
@@ -573,6 +450,11 @@ int main(int argc, char *argv[])
 #endif
 
 
+  //given teh timers are using "stuff" - kill them off before we start
+  // tearing down the eco-system to stop inadvertantly accesing things that
+  // have just been deleted
+ // g_source_remove(idOfTimer1);
+  g_source_remove(idOfTimer2);
 
   g_print ("Deleting pipeline\n");
   gst_object_unref (GST_OBJECT (pipeline));
@@ -595,6 +477,9 @@ int main(int argc, char *argv[])
     free(ServiceInfo_MasterStore.ServiceComponents);
   }
 
+  if (theWatchDog != NULL)
+    delete theWatchDog;
+  
   // taxi's home
 return 0;
 }

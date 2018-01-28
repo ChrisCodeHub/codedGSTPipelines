@@ -8,10 +8,11 @@ set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/home/chris/dev_gst/gst-build/bu
 set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/home/chris/dev_gst/gst-build/build/subprojects/gst-plugins-bad/pkgconfig/")
 
 #Bring in the headers (note I sit inside src for IDEs to find them!)
-#include_directories(../src/include)
+include_directories(./src/include)
 
 #Manually add the sources using the set command as follows:
-set(SOURCES ../src/FileDecoder.cpp)
+set(SOURCES ../src/FileDecoder.cpp 
+            ../src/watchDog.cpp)
 add_executable(fileDecoder ${SOURCES})
 
 
