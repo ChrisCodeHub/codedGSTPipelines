@@ -5,6 +5,9 @@
 #include <iostream>
 
 
+// below line is required as the mpegts stuff is unstable
+#define GST_USE_UNSTABLE_API
+#include <gst/mpegts/mpegts.h>
 
 struct PerServiceInfo{
   guint16       programNumber;
@@ -35,7 +38,6 @@ class streamServicesInfo
     void ParseInfoFromTSFrontEnds( GstMessage *msg);
     void ShowStreamSummaries(void);
 
-
   private:
     bool  haveSeenPAT;
     bool  haveSeenPMT;
@@ -43,6 +45,11 @@ class streamServicesInfo
     guint16 numberServicesInfoStoredFor;
     guint16 MAX_numberServicesInfoStoredFor;
     PerServiceInfo  **ServiceComponents;
+
+
+    void PAT_messageHandler( GstMpegtsSection *pTSSectionBeingStudied);
+    void PMT_messageHandler( GstMpegtsSection *pTSSectionBeingStudied);
+    void SDT_messageHandler( GstMpegtsSection *pTSSectionBeingStudied);
 };
 
 #endif

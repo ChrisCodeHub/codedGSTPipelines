@@ -8,9 +8,10 @@
 
 
 WatchDog::WatchDog( unsigned int CallingInterval, 
-                    infoAboutMe *ecoSystemInfo){
+                    infoAboutMe *ecoSystemInfo): callsSoFar(0)
+{
 
-    callsSoFar = 0;
+    
     localEcoSystemInfo = ecoSystemInfo;
     std::cout<< "Made a watchDog, hopefully it barks as needed" << std::endl;
  }

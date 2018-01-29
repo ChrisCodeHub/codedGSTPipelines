@@ -7,11 +7,6 @@
 #include "localTypes.h"
 #include "watchDog.h"
 
-
-// below line is required as the mpegts stuff is unstable
-#define GST_USE_UNSTABLE_API
-#include <gst/mpegts/mpegts.h>
-
 // useful URLS
 // https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // Link to how to tell what the structures are
@@ -151,9 +146,6 @@ int main(int argc, char *argv[])
  
   // create a periodic timer based function that is called to do the housework
   // and any required maintenance tasksm scheduing etc
-  //guint idOfTimer1 = g_timeout_add (timedFuncInterval, timedCall , &systemMetaInfo);
-
-  guint timedFuncInterval = 1000;
   systemMetaInfo.pipelineToControl    = pipeline;
   systemMetaInfo.ApplicationMainloop  = loop;
   systemMetaInfo.parserInLine         = h264Videoparser;
