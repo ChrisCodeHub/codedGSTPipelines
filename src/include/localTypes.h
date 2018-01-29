@@ -19,7 +19,7 @@ typedef enum{
 
 
 // below is used in the periodic timer based "Janitor function"
-typedef struct
+struct infoAboutMe
 {
   int timerCallsSoFar;
   GstElement *pipelineToControl;
@@ -28,6 +28,15 @@ typedef struct
   GstElement *videoDecoder;
   GstElement *theVideoAdapter;
   GstElement *theVideoFakeSink;
-}infoAboutMe;
+  infoAboutMe(){
+    timerCallsSoFar = 0;
+    pipelineToControl = NULL;
+    ApplicationMainloop = NULL;
+    parserInLine = NULL;
+    videoDecoder = NULL;
+    theVideoAdapter = NULL;
+    theVideoFakeSink = NULL;
+  }
+};
 
 #endif

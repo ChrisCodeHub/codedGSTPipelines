@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <iostream>
-#include "serviceInfo.h"
 #include "localTypes.h"
 #include "watchDog.h"
 

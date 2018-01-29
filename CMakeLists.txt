@@ -12,7 +12,8 @@ include_directories(./src/include)
 
 #Manually add the sources using the set command as follows:
 set(SOURCES ../src/FileDecoder.cpp 
-            ../src/watchDog.cpp)
+            ../src/watchDog.cpp
+            ../src/serviceInfo.cpp)
 add_executable(fileDecoder ${SOURCES})
 
 
