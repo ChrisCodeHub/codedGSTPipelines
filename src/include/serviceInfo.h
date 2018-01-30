@@ -1,5 +1,7 @@
 #ifndef __SERVICE_INFO__
 #define __SERVICE_INFO__
+#include <map>
+#include <string>
 #include <gst/gst.h>
 #include "localTypes.h"
 #include <iostream>
@@ -15,8 +17,8 @@ struct PerServiceInfo{
   guint16       AudioPID;
   guint16       PCR_RID;
   eVideoCodec   VideoCodec;
-  char*         ServiceProvider;
-  char*         ServiceName;
+  std::string   ServiceProvider;
+  std::string   ServiceName;
   guint16       VideoWidth;
   guint16       VideoHeight;
   eChromaFormat ChromaFormat;
@@ -44,8 +46,7 @@ class streamServicesInfo
     bool  haveSeenSDT;
     guint16 numberServicesInfoStoredFor;
     guint16 MAX_numberServicesInfoStoredFor;
-    PerServiceInfo  **ServiceComponents;
-
+    std::map<unsigned int, PerServiceInfo> serviceMap;
 
     void PAT_messageHandler( GstMpegtsSection *pTSSectionBeingStudied);
     void PMT_messageHandler( GstMpegtsSection *pTSSectionBeingStudied);

@@ -15,11 +15,7 @@ streamServicesInfo::streamServicesInfo(void): haveSeenPAT(false),
                                               MAX_numberServicesInfoStoredFor(40)
 {
 
-    ServiceComponents = (PerServiceInfo**)(malloc(MAX_numberServicesInfoStoredFor * (sizeof(PerServiceInfo*))));
-    for (int i = 0; i < MAX_numberServicesInfoStoredFor; ++i)
-    {
-        ServiceComponents[i] = NULL;
-    }
+
 }
 
 //##############################################################
@@ -28,27 +24,7 @@ streamServicesInfo::streamServicesInfo(void): haveSeenPAT(false),
 //
 streamServicesInfo::~streamServicesInfo()
 {
-    for (int i = 0; i < MAX_numberServicesInfoStoredFor; ++i)
-    {
-        if (ServiceComponents[i] != NULL)
-        {
-            if(ServiceComponents[i]->ServiceName != NULL)
-            {
-                free (ServiceComponents[i]->ServiceName);
-            }
-            free(ServiceComponents[i]);
-        }
-    }
-    if(ServiceComponents != NULL)
-    {
-        free(ServiceComponents);
-    }     
 }
-
-
-
-
-
 
 //##############################################################
 //
@@ -88,13 +64,6 @@ void streamServicesInfo::PMT_messageHandler( GstMpegtsSection *pTSSectionBeingSt
     */
     const GstMpegtsPMT *pPMT_Section;
     pPMT_Section = gst_mpegts_section_get_pmt(pTSSectionBeingStudied);
-    guint16  thisProgramPCR_PID = pPMT_Section->pcr_pid;
-    guint16  thisProgramProgramNumber = pPMT_Section->program_number;
-    haveSeenPMT = true;
-
-    guint16 nextSIStoreSlot = numberServicesInfoStoredFor;
-    guint16 maxSIStoreSlot  = MAX_numberServicesInfoStoredFor;
-
     GPtrArray *pPMTstreams     = pPMT_Section->streams;
     guint16 lengthOfStructures = pPMTstreams->len;
     gpointer Element;
@@ -104,6 +73,8 @@ void streamServicesInfo::PMT_messageHandler( GstMpegtsSection *pTSSectionBeingSt
     guint16 videoPID = 0;
     guint16 audioPID = 0;
     GPtrArray *streamDescriptors;
+
+    haveSeenPMT = true;
 
     for (i = 0; i < lengthOfStructures; i++)
     {
@@ -142,35 +113,25 @@ void streamServicesInfo::PMT_messageHandler( GstMpegtsSection *pTSSectionBeingSt
     // check to see if the program_number has already been stored in the table, or if this is new
     //information that requires a new entry to be created
 
-    int programAlreadyRecorded = FALSE;
-    for(guint16 entry = 0; entry < nextSIStoreSlot; entry++)
+    // Using teh program_number as the map - key.  Check f we already have an entry, if
+    // not then add one to "numberServicesInfoStoredFor" to track total programs
+    // NOTE we chose here to restore teh latest info over the previous even if the map is 
+    // present justin case some dodgy upstreamdudes change the tables on us
+    guint16 programNumber = pPMT_Section->program_number;
+    if (serviceMap.find(programNumber) == serviceMap.end() ) 
     {
-        if( (ServiceComponents[entry]->programNumber == pPMT_Section->program_number))
-        {
-            programAlreadyRecorded = TRUE;
-            break;  // jump out of for loop if we've found the entry
-        }
-    }
-    if(programAlreadyRecorded == FALSE)
-    {
-        if (nextSIStoreSlot < maxSIStoreSlot)
-        {
-        ServiceComponents[nextSIStoreSlot] = (PerServiceInfo*)malloc(sizeof(PerServiceInfo));
         numberServicesInfoStoredFor++;
-
-        ServiceComponents[nextSIStoreSlot]->PCR_RID = pPMT_Section->pcr_pid;
-        ServiceComponents[nextSIStoreSlot]->VideoPID = videoPID;
-        ServiceComponents[nextSIStoreSlot]->AudioPID = audioPID;
-        ServiceComponents[nextSIStoreSlot]->programNumber = pPMT_Section->program_number;
-        ServiceComponents[nextSIStoreSlot]->ServiceName = NULL;     // set these two ponters SAFE
-        ServiceComponents[nextSIStoreSlot]->ServiceProvider = NULL;
-
-        }
-        else
+        if (numberServicesInfoStoredFor > MAX_numberServicesInfoStoredFor)
         {
-            g_print("RAN OUT OF SI STORE SLOTS!!!!!! \n");
+            std::cout<<"Out Of SI storage slots"<<std::endl;
         }
+
     }
+    serviceMap[programNumber].PCR_RID = pPMT_Section->pcr_pid;
+    serviceMap[programNumber].VideoPID = videoPID;
+    serviceMap[programNumber].AudioPID = audioPID;
+    serviceMap[programNumber].ServiceName = "NULL";
+    serviceMap[programNumber].ServiceProvider = "NULL";
     return;
 
 }
@@ -192,7 +153,7 @@ void streamServicesInfo::SDT_messageHandler( GstMpegtsSection *pTSSectionBeingSt
         for (ProgramToParse = 0; ProgramToParse < lengthOfStructures; ProgramToParse++)
         {
             gpointer Element          = g_ptr_array_index(pSDTservices, ProgramToParse);
-            guint8 servceID            = ((GstMpegtsSDTService*)Element)->service_id;
+            guint8 serviceID            = ((GstMpegtsSDTService*)Element)->service_id;
             GPtrArray *pSDTDecsriptors = ((GstMpegtsSDTService*)Element)->descriptors;
             if(pSDTDecsriptors != NULL)
             {
@@ -201,27 +162,22 @@ void streamServicesInfo::SDT_messageHandler( GstMpegtsSection *pTSSectionBeingSt
                 gboolean didIgetAServiceName;
                 GstMpegtsDVBServiceType *service_type;
                 gchar *ServiceName[100];
-                gchar *ProvideName[100];
+                gchar *ProviderName[100];
                 gchar **pServiceName = &ServiceName[0];
-                gchar **pProvideName  = &ProvideName[0];
+                gchar **pProviderName  = &ProviderName[0];
                 gst_mpegts_descriptor_parse_dvb_service( (const GstMpegtsDescriptor*)Descriptor,
                                                         NULL,
                                                         pServiceName,
-                                                        pProvideName);
+                                                        pProviderName);
                 g_ptr_array_unref(pSDTDecsriptors);
 
                 // store findings
-                guint16 SIStoreSlotsUsedSoFar = numberServicesInfoStoredFor;
-                guint16 i;
-                for (i = 0 ; i < SIStoreSlotsUsedSoFar; i++)
+                if (serviceMap.find(serviceID) == serviceMap.end())
                 {
-                if (ServiceComponents[i]->programNumber == servceID)
-                {
-                    ServiceComponents[i]->ServiceName = (char*)malloc(100);
-                    strcpy(ServiceComponents[i]->ServiceName, ServiceName[0]);
+                    std::cout<<" Program Number in SDT " << serviceID << " not in PMT " << std::endl;
                 }
-                }
-                // end store
+                serviceMap[serviceID].ServiceName = *ServiceName;
+                serviceMap[serviceID].ServiceProvider = *ProviderName;
                 g_ptr_array_unref(pSDTDecsriptors);
             }
         }
@@ -290,15 +246,9 @@ void streamServicesInfo::ParseInfoFromTSFrontEnds( GstMessage *msg)
 
 void streamServicesInfo::ShowStreamSummaries(void)
 {
-    for (int i = 0; i < MAX_numberServicesInfoStoredFor; ++i)
+    for(std::map<unsigned int, PerServiceInfo>::iterator iter = serviceMap.begin(); iter != serviceMap.end(); ++iter)
     {
-        if (ServiceComponents[i] != NULL)
-        {
-            g_print("PMT [%02d]: PCR 0x%04x  V:0x%04x  A:0x%04x Service Name:%s \n",ServiceComponents[i]->programNumber,
-                                                                                    ServiceComponents[i]->PCR_RID,
-                                                                                    ServiceComponents[i]->VideoPID,
-                                                                                    ServiceComponents[i]->AudioPID,
-                                                                                    ServiceComponents[i]->ServiceName);
-        }
+        unsigned int key = iter->first;
+        std::cout << key << " " << iter->second.ServiceName << std::endl;
     }
 }
